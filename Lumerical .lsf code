@@ -27,57 +27,48 @@ delete;
 
 #Block 2: this block is for defining the constanst such as the refractive index of materials, constant geometrical features, etc.
 
-final_DC=0.6;  #The duty cycle of the uniform section of the apodized grating coupler. 
-thick_Si=220e-9;  #Thisckness of the amorphous silicon layer
+uniform_DC=0.6;  #The duty cycle of the uniform section of the apodized grating coupler. 
+thick_Si=220e-9;  #Thisckness of the amorphous silicon layer (y direction)
 NP=40;  #Total number of unit cells in the grating couplers
 si_index = 3.0468; #The effective refractive index of amorphous silicon on diamond at 1550 nm.
+width_GC=6600e-9;    #The width of the grating coupler. However, z coordinate for 2D doesn't matter.
+width_BOX=width_GC;  #The width of the substrate.
+
+
 
 #End of block 2.
 
-#Block 3: This block is for simulation uniform grating couplers. We need to simulate uniform grating couplers in order to extract the 
-#diffraction angle of them. This diffraction angle will be used when we want to apodize the first few unit cells of these uniform grating
-#grating couplers, because they have to diffract light at the same angle.
+#Block 3: the main block which we will simulate the grating couplers. First, We simulate uniform grating couplers in order to extract their 
+#diffraction angle. Then, we will use this diffraction angle when we want to apodize the first few unit cells of these uniform grating
+#couplers so all the unit cells have the same diffraction angle. 
 
-qs = 0;
-for(final_period_length=420e-9; final_period_length< 472e-9; final_period_length = final_period_length + 10e-9){ 
-
+qs = 0; #Counter parameter
 
 
+#Sweeping uniform grating coupler, starting with their period length at 460 nm and increasing it by 10 nm steps until we reach 580 nm.
+
+for(uniform_period_length=460e-9; uniform_period_length< 582e-9; uniform_period_length = uniform_period_length + 10e-9){  
+uniform_gap = (1-uniform_DC)*(uniform_period_length);
+uniform_grating = (uniform_DC)*(uniform_period_length);
 
 
+#Block 3.1: defining the geometrical features in the x coordinate
 
-final_gap = (1-final_DC)*(final_period_length);
-final_grating = (final_DC)*(final_period_length);
+length_WG=5000e-9; #Input waveguide length after which the grating starts
+length_BOX=NP*(uniform_period_length)+length_WG;  #total length of the substrate
 
-
-
- #y coordinate
-etching_depth=0;
-shallow_depth=0;
-width_GC=6600e-9;    #z coordinate for 2D doesn't matter
-width_BOX=width_GC;
-width_clad=width_GC;
-width_sub=width_GC;
-
-#x coordinate
-length_WG=5000e-9; #input waveguide length after which the grating starts
-length_BOX=NP*final_period_length+length_WG+0e-6;
+#End of block 3.1
 
 
 
+#Block 3.2: Defining the physical blocks
 
 
-############# loop to draw periodic structure based on NP-number of periods, period_length, and DC
-
-
-
-                  
-                 length_BOX=NP*(final_period_length)+length_WG;
-       
+       #Defining the waveguide
                   addrect;
-                  set("name","Si_waveguide");
+                  set("name","aSi_waveguide");
                   set("material","<Object defined dielectric>");
-                  set("index",3.62);
+                  set("index",3.62);  #Refractive index of amorphous silicon at 1550 nm.
                   
                   set("x min",-length_WG);
                   set("x max",0);
@@ -89,15 +80,15 @@ length_BOX=NP*final_period_length+length_WG+0e-6;
                   set("override mesh order from material database",1); #1 activate possibility to set mesh order, which is done in the line belwo
                   set("mesh order",1); 
 
-                   
+                #Defining the substrate  
                   addrect;
                   set("name","substrate");
                   set("material","<Object defined dielectric>");
-                  set("index",2.3878);
+                  set("index",2.3878);  #Refractive index of diamond at 1550 nm
                   set("x min",-length_WG);
                   set("x max",-length_WG+length_BOX);
                   set("y max",0);
-                  set("y min",-1500e-9);
+                  set("y min",-1500e-9); #Thickness of our substrate
                   set("z min",-3300e-9);
                   set("z max",3300e-9);
                   set("alpha", 1);
@@ -105,7 +96,7 @@ length_BOX=NP*final_period_length+length_WG+0e-6;
                   set("mesh order",1);
                   
                   
-                  
+            #Defining the FDTD region
                   addfdtd;
                   set("dimension","2D");
                   set("x min",-length_WG);
@@ -124,15 +115,15 @@ length_BOX=NP*final_period_length+length_WG+0e-6;
                   set("mesh accuracy",8);
                   
  
-       
+       #Defining the uniform grating coupler 
                       for(i=0:NP-1){
                                     addrect;
                                     set("name","GC_"+num2str(i+1));
                                     set("material","<Object defined dielectric>");
                                     set("index",3.62);
                                     
-                                    set("x min",i*final_period_length+(final_period_length*(1-final_DC)));
-                                    set("x max",(i+1)*(final_period_length));
+                                    set("x min",i*uniform_period_length+(uniform_period_length*(1-uniform_DC)));
+                                    set("x max",(i+1)*(uniform_period_length));
                                     set("y min",0);
                                     set("y max",thick_Si);
                                     set("z min",-3300e-9);
@@ -142,20 +133,20 @@ length_BOX=NP*final_period_length+length_WG+0e-6;
                                     set("mesh order",1);
                       } 
                    
-                   #############################################################
-                    
-                   lambda=1.55e-6;
-                   wl_span=100e-9;
-                   
-                   setglobalmonitor("use wavelength spacing",1);
-                   setglobalmonitor("frequency points",1); 
+                  #End of block 3.2
 
-                   setglobalsource("center wavelength",lambda);
-                   setglobalsource("wavelength span",wl_span);
+
+#Block 3.3: Defining the features of the source and monitors and adding them to our simulations               
+lambda=1.55e-6;
+wl_span=100e-9;
                    
-                   #############################################################
-                  
-                   #############################################################
+setglobalmonitor("use wavelength spacing",1);
+setglobalmonitor("frequency points",1); 
+
+setglobalsource("center wavelength",lambda);
+setglobalsource("wavelength span",wl_span);
+                   
+                #Adding the Gaussian source in the waveguide
                    
                    addmode;
                    set("name","WG_source");
@@ -168,7 +159,7 @@ length_BOX=NP*final_period_length+length_WG+0e-6;
                    set("z max",3300e-9);
                    set("override global source settings",0);
                    
-                   #############################################################
+                   #Adding monitor on top of the structure to capture the diffraction angle and the total power that is being diffracted upward
                    
                    addpower;
                    set("name","power_up");
@@ -176,28 +167,21 @@ length_BOX=NP*final_period_length+length_WG+0e-6;
                    set("x min",-length_WG);
                    set("x max",-length_WG+length_BOX);
                    set("y",2800e-9);
-                  
+                  #End of block 3.3
+
+                   #Block 3.4: we run the simulation and extract the diffraction angle
                    run;
                    
-                   
-                   UP=transmission("power_up");   
-                   ?"Power_Up ="+num2str(UP);
   
-         
-                   
-                   
+                  #Commands for finding the diffraction angle
                    a=farfieldangle("power_up");
                    b=farfield2d("power_up"); 
                    d_angle=a(find(b==max(b)));
                    ?"Far_field_angle= "+num2str(d_angle);
 
-
                    
-                   a=getresult("power_up","E");
-                   field_profile=a.Ez; 
-                   prop_axis=a.x;
       
-
+                   #Now, we will switch to layout mode and delete all the structures defined from previous blocks.
                    switchtolayout;
                    
 
@@ -299,38 +283,17 @@ length_BOX=NP*final_period_length+length_WG+0e-6;
                   
                    
              
-                   
+                   #End of block 3.4
             
       
    
 
 
+#After we found the diffraction angle of a specific uniform grating coupler, we will start apodizng its first few unit cells.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-##################################################################################################################
-#
-#                         Draw structure
-#
-##################################################################################################################
-
-
+#Block 3.5: defining the waveguide
 addrect;
-set("name","Si_waveguide");
+set("name","aSi_waveguide");
 set("material","<Object defined dielectric>");
 set("index",3.62);
 
@@ -344,25 +307,25 @@ set("alpha", 0.4);
 set("override mesh order from material database",1); #1 activate possibility to set mesh order, which is done in the line belwo
 set("mesh order",1);
 
-clad_index=1;
-WL=1550e-9;
+#End of block 3.5
 
-sin_theta=sin((d_angle)*pi/180);
-?sin_theta;
-#neff = sin_theta + (WL/final_period_length)
+#Block 3.6: applying the apodization
+
+sin_theta=sin((d_angle)*pi/180); #Calculating the sin of diffraction angle
+
+#Sweeping different DC_0
 for (DC_zero = 0.75; DC_zero<0.9251; DC_zero = DC_zero+0.025){
 
 
+#Block 3.6.1: defining the first apodized unit cell
+neff = (DC_zero*si_index) + ((1-DC_zero)*1); #Defining the effective refractive index of the first apodized unit cell
 
-neff = (DC_zero*si_index) + ((1-DC_zero)*clad_index);
+first_periodicity=lambda/(neff-sin_theta); #Finding the period length of the first apodized unit cells 
 
-first_periodicity=WL/(neff-sin_theta);
-?neff;
-
-    first_gap=(1-DC_zero)*first_periodicity;
-    first_grating=DC_zero*first_periodicity;
+first_gap=(1-DC_zero)*first_periodicity; #The gap of the first apodized cell
+first_grating=DC_zero*first_periodicity; #The grating of the first apodized cell
     
-    
+
     addrect;
     set("name","first_grating");
     set("material","<Object defined dielectric>");
@@ -377,11 +340,14 @@ first_periodicity=WL/(neff-sin_theta);
     set("alpha", 0.4);
     set("override mesh order from material database",1); #1 activate possibility to set mesh order, which is done in the line belwo
     set("mesh order",1);
-    x=first_gap+first_grating;
+    x=first_gap+first_grating; #where the first apodized cell ends.
     
-    #DC = 0.95;
-    periodicity = 407e-9;
-############# loop to draw periodic structure based on NP-number of periods, period_length, and DC
+    
+    periodicity = 407e-9; #Set the periodicity to a random number to redefine it for the next run in this loop.
+#End of block 3.6.1
+
+
+#Block 3.6.2: defining the other apodized gunit cells based on different apodization factors, R, and creating uniuform cells after them
 
  for(R=0.0025; R<0.1; R = R+0.0025){
        
@@ -391,14 +357,16 @@ first_periodicity=WL/(neff-sin_theta);
     for(i=0:NP-2){
         
         DC=DC_zero-(R*(x*(10e+5)));
-        neff=(DC*si_index)+((1-DC)*clad_index);
-        periodicity=WL/(neff-sin_theta);
-        
-        if(DC>final_DC & periodicity<final_period_length){
+        neff=(DC*si_index)+((1-DC)*1);
+        periodicity=lambda/(neff-sin_theta);
+
+#This if block checks to see if after each apodized cell, have we met the conditions for switiching to uniform section or not.Specifically, if checks
+#that if the duty cycle of the apodized cell is still larger than the uniform cells and also its period length is smaller that the uniform period
+#length, if will continue the apodization. Otherwise, it will stop creating apodized cells and starts creating uniform cells
+
+        if(DC>final_DC & periodicity<uniform_period_length){
     #DC=DC_zero-(R*(x*(10e+5)));
-   
-    #neff=(DC*si_index)+((1-DC)*clad_index);
-    #periodicity=WL/(neff-sin_theta);
+
     gap=(1-DC)*periodicity;
     grating_length=periodicity-gap;
     
@@ -444,7 +412,14 @@ first_periodicity=WL/(neff-sin_theta);
         }
    
     }
-    
+
+#End of block 3.6.2
+#End of block 3.6
+
+
+#Block 3.7: defining other physical blocks
+
+#Defining substrate
      addrect;
      set("name","substrate");
      set("material","<Object defined dielectric>");
@@ -460,7 +435,7 @@ first_periodicity=WL/(neff-sin_theta);
      set("mesh order",1);
     
    
-                  
+      #Defining fdtd            
       addfdtd;
       set("dimension","2D");
       set("x min",-length_WG);
@@ -480,8 +455,8 @@ first_periodicity=WL/(neff-sin_theta);
  
        
                    
-                   
-                   #############################################################
+                   #Defining the features of the source and the monitors
+               
                     
                    lambda=1.55e-6;
                    wl_span=100e-9;
@@ -492,9 +467,7 @@ first_periodicity=WL/(neff-sin_theta);
                    setglobalsource("center wavelength",lambda);
                    setglobalsource("wavelength span",wl_span);
                    
-                   #############################################################
-                  
-                   #############################################################
+                   #Putting the mode source
                    
                    addmode;
                    set("name","WG_source");
@@ -507,7 +480,7 @@ first_periodicity=WL/(neff-sin_theta);
                    set("z max",3300e-9);
                    set("override global source settings",0);
                    
-                   #############################################################
+                  #Putting a monitor above the structre 
                    
                    addpower;
                    set("name","power_up");
@@ -515,21 +488,25 @@ first_periodicity=WL/(neff-sin_theta);
                    set("x min",-length_WG);
                    set("x max",x);
                    set("y",2800e-9);
-                   
+
+              #Putting a monitor below the structre to measure downward diffraction
                    addpower;
                    set("name","power_down");
                    set("monitor type","Linear X");
                    set("x min",-length_WG);
                    set("x max",x);
                    set("y",-1500e-9);
-                   
+
+                  #Putting a monitor in the waveguide to measure the reflection
                    addpower;
                    set("name","power_R");
                    set("monitor type","Linear Y");
                    set("x",-length_WG);
                    set("y min",-500e-9);
                    set("y max", thick_Si + 500e-9);
-                   
+
+
+                  #Putting a monitor at the end of the grating coupler to see how much light will transmitt without diffraction
                    addpower;
                    set("name","power_T");
                    set("monitor type","Linear Y");
@@ -538,8 +515,9 @@ first_periodicity=WL/(neff-sin_theta);
                    set("y max", 2800e-9);
                    
               
-                    
-                   
+                    #End of block 3.7
+
+               #Block 3.8: we run the simulation and extract the parameters
                    run;
                    
                    
@@ -554,24 +532,26 @@ first_periodicity=WL/(neff-sin_theta);
 
                    TRANS=transmission("power_T");
                    ?"Power_Transmitted="+num2str(TRANS);
-                   
+
+
+                   #commands for extracting the diffraction angle
                    a=farfieldangle("power_up");
                    b=farfield2d("power_up"); 
                    diff_angle=a(find(b==max(b)));
                    ?"Far_field_angle= "+num2str(diff_angle);
 
 
-                   
+                   #commands for extracting the mode profile of the upward diffracted light
                    a=getresult("power_up","E");
                    field_profile=a.Ez; 
                    prop_axis=a.x;
                    
-                   
+                   #Saving the results
                    matlabsave("thesimulationdata"+num2str(qs),UP,DOWN,BACK,TRANS,R,final_period_length,DC_zero,diff_angle,field_profile,prop_axis,first_gap);
                    switchtolayout;
                    qs = qs+1;
                    
-                #  if (0) { # if 0, skip these lines. if 1, run these lines.  
+                #Now we will delete the defined objest for so the creation of devices in the next round don't overlap. 
                    switchtolayout;
                    select("substrate");
                    delete;
