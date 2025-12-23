@@ -1,669 +1,408 @@
-#Block 1: This block is for creating the simulation file and defining its directory.
+#######################################################################
+# Apodized Grating Coupler (a-Si on Diamond) — 2D FDTD (Lumerical)
+#
+# Workflow:
+#   (1) Sweep UNIFORM gratings to extract a reference far-field peak angle
+#   (2) For each uniform design, sweep apodization parameters (DC0, R),
+#       generate apodized + uniform sections, run FDTD, and save results.
+#
+#
+#######################################################################
 
+
+#############################
+#  file name
+#############################
 clear;
-#changing directory and saving the .lsf file
-FILE_NAME="Grating_coupler_Si_2D";
-
-path=getpath; 
-replacestring(path,"\n","");
-a=length(path);
-string_chceck=5;
-for(0; string_chceck>0; 0) {
-   a=a-1;
-   if(substring(path,a,1)==":"){
-        string_chceck=-1;   
-   } 
-}
-
-cd(substring(path,a-1,length(path)-a+1));
-save(FILE_NAME+".fsp");
-
-#End of block 1.
-
-
 switchtolayout;
 selectall;
 delete;
 
-#Block 2: this block is for defining the constanst such as the refractive index of materials, constant geometrical features, etc.
+FILE_NAME = "GratingCoupler_aSiDiamond_2D";
 
-uniform_DC=0.6;  #The duty cycle of the uniform section of the apodized grating coupler. 
-thick_Si=220e-9;  #Thisckness of the amorphous silicon layer (y direction)
-NP=40;  #Total number of unit cells in the grating couplers
-si_index = 3.0468; #The effective refractive index of amorphous silicon on diamond at 1550 nm.
-width_GC=6600e-9;    #The width of the grating coupler. However, z coordinate for 2D doesn't matter.
-width_BOX=width_GC;  #The width of the substrate.
+#############################
+# 1) constants and settings
+#############################
 
+# Geometry 
+thick_Si      = 220e-9;         # a-Si thickness (y)
+NP            = 40;             # number of grating periods
+length_WG     = 5000e-9;        # input waveguide length 
+width_GC      = 6600e-9;        # z span (2D, but keep consistent)
+sub_thickness = 1500e-9;        # substrate thickness 
 
+#  Refractive Indices at 1550 nm
+n_aSi     = 3.62;               # a-Si refractive refractive index 
+n_diamond = 2.3878;             # diamond refractive index
+si_index  = 3.0468;             # effective refractive index of a-Si on diamond
 
-#End of block 2.
+# Source and monitor settings 
+lambda0   = 1.55e-6;
+wl_span   = 100e-9;
+sim_time  = 1500e-15;
 
-#Block 3: the main block which we will simulate the grating couplers. First, We simulate uniform grating couplers in order to extract their 
-#diffraction angle. Then, we will use this diffraction angle when we want to apodize the first few unit cells of these uniform grating
-#couplers so all the unit cells have the same diffraction angle. 
-
-qs = 0; #Counter parameter
-
-
-#Sweeping uniform grating coupler, starting with their period length at 460 nm and increasing it by 10 nm steps until we reach 580 nm.
-
-for(uniform_period_length=460e-9; uniform_period_length< 582e-9; uniform_period_length = uniform_period_length + 10e-9){  
-uniform_gap = (1-uniform_DC)*(uniform_period_length);
-uniform_grating = (uniform_DC)*(uniform_period_length);
-
-
-#Block 3.1: defining the geometrical features in the x coordinate
-
-length_WG=5000e-9; #Input waveguide length after which the grating starts
-length_BOX=NP*(uniform_period_length)+length_WG;  #total length of the substrate
-
-#End of block 3.1
-
-
-
-#Block 3.2: Defining the physical blocks
-
-
-       #Defining the waveguide
-                  addrect;
-                  set("name","aSi_waveguide");
-                  set("material","<Object defined dielectric>");
-                  set("index",3.62);  #Refractive index of amorphous silicon at 1550 nm.
-                  
-                  set("x min",-length_WG);
-                  set("x max",0);
-                  set("y min",0);
-                  set("y max",thick_Si);
-                  set("z",0);
-                  set("z span",width_GC);
-                  set("alpha", 0.4);
-                  set("override mesh order from material database",1); #1 activate possibility to set mesh order, which is done in the line belwo
-                  set("mesh order",1); 
-
-                #Defining the substrate  
-                  addrect;
-                  set("name","substrate");
-                  set("material","<Object defined dielectric>");
-                  set("index",2.3878);  #Refractive index of diamond at 1550 nm
-                  set("x min",-length_WG);
-                  set("x max",-length_WG+length_BOX);
-                  set("y max",0);
-                  set("y min",-1500e-9); #Thickness of our substrate
-                  set("z min",-3300e-9);
-                  set("z max",3300e-9);
-                  set("alpha", 1);
-                  set("override mesh order from material database",1);
-                  set("mesh order",1);
-                  
-                  
-            #Defining the FDTD region
-                  addfdtd;
-                  set("dimension","2D");
-                  set("x min",-length_WG);
-                  set("x max",-length_WG+length_BOX);
-                  set("y min",-1500e-9);
-                  set("y max",3000e-9);
-                  set("z",0);   
-                  set("simulation time",1500e-15);
-                  set("x min bc", "PML");
-                  set("x max bc", "PML");
-                  set("y min bc", "PML");
-                  set("y max bc", "PML"); 
-                   
-                  set("mesh type","auto non-uniform");
-                  set("allow grading in y",1);
-                  set("mesh accuracy",8);
-                  
- 
-       #Defining the uniform grating coupler 
-                      for(i=0:NP-1){
-                                    addrect;
-                                    set("name","GC_"+num2str(i+1));
-                                    set("material","<Object defined dielectric>");
-                                    set("index",3.62);
-                                    
-                                    set("x min",i*uniform_period_length+(uniform_period_length*(1-uniform_DC)));
-                                    set("x max",(i+1)*(uniform_period_length));
-                                    set("y min",0);
-                                    set("y max",thick_Si);
-                                    set("z min",-3300e-9);
-                                    set("z max",3300e-9);
-                                    set("alpha", 1);
-                                    set("override mesh order from material database",1);
-                                    set("mesh order",1);
-                      } 
-                   
-                  #End of block 3.2
-
-
-#Block 3.3: Defining the features of the source and monitors and adding them to our simulations               
-lambda=1.55e-6;
-wl_span=100e-9;
-                   
 setglobalmonitor("use wavelength spacing",1);
-setglobalmonitor("frequency points",1); 
+setglobalmonitor("frequency points",1);
+setglobalsource("center wavelength", lambda0);
+setglobalsource("wavelength span", wl_span);
 
-setglobalsource("center wavelength",lambda);
-setglobalsource("wavelength span",wl_span);
-                   
-                #Adding the Gaussian source in the waveguide
-                   
-                   addmode;
-                   set("name","WG_source");
-                   set("mode selection","fundamental TM"); 
-                   set("injection axis","x-axis");
-                   set("x",-length_WG+3000e-9);
-                   set("y min",-500e-9);
-                   set("y max", thick_Si+500e-9); 
-                   set("z min",-3300e-9);
-                   set("z max",3300e-9);
-                   set("override global source settings",0);
-                   
-                   #Adding monitor on top of the structure to capture the diffraction angle and the total power that is being diffracted upward
-                   
-                   addpower;
-                   set("name","power_up");
-                   set("monitor type","Linear X"); 
-                   set("x min",-length_WG);
-                   set("x max",-length_WG+length_BOX);
-                   set("y",2800e-9);
-                  #End of block 3.3
+#  Uniform grating sweep reference angle extraction
+uniform_DC    = 0.60;
+p_start       = 460e-9;
+p_stop        = 582e-9;         
+p_step        = 10e-9;
 
-                   #Block 3.4: we run the simulation and extract the diffraction angle
-                   run;
-                   
-  
-                  #Commands for finding the diffraction angle
-                   a=farfieldangle("power_up");
-                   b=farfield2d("power_up"); 
-                   d_angle=a(find(b==max(b)));
-                   ?"Far_field_angle= "+num2str(d_angle);
+#  Apodization parameter sweeps 
+DC0_start     = 0.75;
+DC0_stop      = 0.9251;         
+DC0_step      = 0.025;
 
-                   
-      
-                   #Now, we will switch to layout mode and delete all the structures defined from previous blocks.
-                   switchtolayout;
-                   
+R_start       = 0.0025;
+R_stop        = 0.1;            
+R_step        = 0.0025;
 
-                   select("substrate");
-                   delete;
-                   select("Si_waveguide");
-                   delete;
-                  
-                   select("GC_1");
-                   delete;
-                   select("GC_2");
-                   delete;
-                   select("GC_3");
-                   delete;
-                   select("GC_4");
-                   delete;
-                   select("GC_5");
-                   delete;
-                   select("GC_6");
-                   delete;
-                   select("GC_7");
-                   delete;
-                   select("GC_8");
-                   delete;
-                   select("GC_9");
-                   delete;
-                   select("GC_10");
-                   delete;
-                   select("GC_11");
-                   delete;
-                   select("GC_12");
-                   delete;
-                   select("GC_13");
-                   delete;
-                   select("GC_14");
-                   delete;
-                   select("GC_15");
-                   delete;
-                   select("GC_16");
-                   delete;
-                   select("GC_17");
-                   delete;
-                   select("GC_18");
-                   delete;
-                   select("GC_19");
-                   delete;
-                   select("GC_20");
-                   delete;
-                   
-                   select("GC_21");
-                   delete;
-                   select("GC_22");
-                   delete;
-                   select("GC_23");
-                   delete;
-                   select("GC_24");
-                   delete;
-                   select("GC_25");
-                   delete;
-                   select("GC_26");
-                   delete;
-                   select("GC_27");
-                   delete;
-                   select("GC_28");
-                   delete;
-                   select("GC_29");
-                   delete;
-                   select("GC_30");
-                   delete;
-                   select("GC_31");
-                   delete;
-                   select("GC_32");
-                   delete;
-                   select("GC_33");
-                   delete;
-                   select("GC_34");
-                   delete;
-                   select("GC_35");
-                   delete;
-                   select("GC_36");
-                   delete;
-                   select("GC_37");
-                   delete;
-                   select("GC_38");
-                   delete;
-                   select("GC_39");
-                   delete;
-                   select("GC_40");
-                   delete;
-                   select("WG_source");
-                   delete;
-                   select("power_up");
-                   delete;
-                   
-               
-                   
-                   select("FDTD");
-                   delete;
-                  
-                   
-             
-                   #End of block 3.4
-            
-      
-   
+#  Apodized-to-uniform switching criteria 
 
+final_DC      = uniform_DC;     
 
-#After we found the diffraction angle of a specific uniform grating coupler, we will start apodizng its first few unit cells.
+# x_sclae
+x_scale       = 1e6;
 
-#Block 3.5: defining the waveguide
-addrect;
-set("name","aSi_waveguide");
-set("material","<Object defined dielectric>");
-set("index",3.62);
+# Run index (for saving)
+qs = 0;
 
-set("x min",-length_WG);
-set("x max",0);
-set("y min",0);
-set("y max",thick_Si);
-set("z",0);
-set("z span",width_GC);
-set("alpha", 0.4);
-set("override mesh order from material database",1); #1 activate possibility to set mesh order, which is done in the line belwo
-set("mesh order",1);
+#############################
+# 2) Uniform sweep: extract diffraction angle
+#############################
 
-#End of block 3.5
+for (uniform_period_length = p_start; uniform_period_length < p_stop; uniform_period_length = uniform_period_length + p_step) {
 
-#Block 3.6: applying the apodization
+    # Derived uniform geometry
+    uniform_gap     = (1-uniform_DC) * uniform_period_length;
+    uniform_grating = uniform_DC * uniform_period_length;
 
-sin_theta=sin((d_angle)*pi/180); #Calculating the sin of diffraction angle
+    # Simulation span for uniform structure
+    length_BOX = NP*uniform_period_length + length_WG;
+    x_min_sim  = -length_WG;
+    x_max_sim  = -length_WG + length_BOX;
 
-#Sweeping different DC_0
-for (DC_zero = 0.75; DC_zero<0.9251; DC_zero = DC_zero+0.025){
+    ###########################################################
+    # 2A) Build UNIFORM model (fresh) and run
+    ###########################################################
+    switchtolayout;
+    selectall;
+    delete;
 
-
-#Block 3.6.1: defining the first apodized unit cell
-neff = (DC_zero*si_index) + ((1-DC_zero)*1); #Defining the effective refractive index of the first apodized unit cell
-
-first_periodicity=lambda/(neff-sin_theta); #Finding the period length of the first apodized unit cells 
-
-first_gap=(1-DC_zero)*first_periodicity; #The gap of the first apodized cell
-first_grating=DC_zero*first_periodicity; #The grating of the first apodized cell
-    
-
+    # Waveguide (a-Si)
     addrect;
-    set("name","first_grating");
+    set("name","wg_aSi");
     set("material","<Object defined dielectric>");
-    set("index",3.62);
-    
-    set("x min",first_gap);
-    set("x max",first_gap+first_grating);
-    set("y min",0);
-    set("y max",thick_Si);
-    set("z",0);
-    set("z span",width_GC);
+    set("index", n_aSi);
+    set("x min", -length_WG);
+    set("x max", 0);
+    set("y min", 0);
+    set("y max", thick_Si);
+    set("z", 0);
+    set("z span", width_GC);
     set("alpha", 0.4);
-    set("override mesh order from material database",1); #1 activate possibility to set mesh order, which is done in the line belwo
+    set("override mesh order from material database",1);
     set("mesh order",1);
-    x=first_gap+first_grating; #where the first apodized cell ends.
-    
-    
-    periodicity = 407e-9; #Set the periodicity to a random number to redefine it for the next run in this loop.
-#End of block 3.6.1
 
-
-#Block 3.6.2: defining the other apodized gunit cells based on different apodization factors, R, and creating uniuform cells after them
-
- for(R=0.0025; R<0.1; R = R+0.0025){
-       
-    x = first_gap+first_grating;
-    DC=DC_zero-(R*(x*(10e+5)));
-    periodicity = 407e-9;
-    for(i=0:NP-2){
-        
-        DC=DC_zero-(R*(x*(10e+5)));
-        neff=(DC*si_index)+((1-DC)*1);
-        periodicity=lambda/(neff-sin_theta);
-
-#This if block checks to see if after each apodized cell, have we met the conditions for switiching to uniform section or not.Specifically, if checks
-#that if the duty cycle of the apodized cell is still larger than the uniform cells and also its period length is smaller that the uniform period
-#length, if will continue the apodization. Otherwise, it will stop creating apodized cells and starts creating uniform cells
-
-        if(DC>final_DC & periodicity<uniform_period_length){
-    #DC=DC_zero-(R*(x*(10e+5)));
-
-    gap=(1-DC)*periodicity;
-    grating_length=periodicity-gap;
-    
-    
-     
+    # Substrate (diamond)
     addrect;
-    set("name","GC"+num2str(i+1));
+    set("name","substrate");
     set("material","<Object defined dielectric>");
-    set("index",3.62);
-    
-    set("x min",x+gap);
-    set("x max",x+periodicity);
-    set("y min",0);
-    set("y max",thick_Si);
-    set("z min",-3300e-9);
-    set("z max",3300e-9);
+    set("index", n_diamond);
+    set("x min", x_min_sim);
+    set("x max", x_max_sim);
+    set("y max", 0);
+    set("y min",-sub_thickness);
+    set("z min",-width_GC/2);
+    set("z max", width_GC/2);
     set("alpha", 1);
     set("override mesh order from material database",1);
     set("mesh order",1);
-   
-      
-    x = x + periodicity;
-        }
-    else{ 
+
+    # Uniform grating teeth
+    for (i=0; i<NP; i=i+1) {
         addrect;
-    set("name","GC"+num2str(i+1));
-    set("material","<Object defined dielectric>");
-    set("index",3.62); 
- 
-    set("x min",x+final_gap);
-    set("x max",x+final_gap+final_grating);
-    set("y min",0);
-    set("y max",thick_Si);
-    set("z min",-3300e-9);
-    set("z max",3300e-9);
-    set("alpha", 1);
-    set("override mesh order from material database",1);
-    set("mesh order",1); 
-    x = x+final_gap+final_grating;
-        
-       
-        
-        }
-   
+        set("name","g_uni_"+num2str(i+1));
+        set("material","<Object defined dielectric>");
+        set("index", n_aSi);
+
+        set("x min", i*uniform_period_length + uniform_gap);
+        set("x max",(i+1)*uniform_period_length);
+        set("y min",0);
+        set("y max",thick_Si);
+        set("z min",-width_GC/2);
+        set("z max", width_GC/2);
+        set("alpha", 1);
+        set("override mesh order from material database",1);
+        set("mesh order",1);
     }
 
-#End of block 3.6.2
-#End of block 3.6
-
-
-#Block 3.7: defining other physical blocks
-
-#Defining substrate
-     addrect;
-     set("name","substrate");
-     set("material","<Object defined dielectric>");
-     set("index",2.3878);
-     set("x min",-length_WG);
-     set("x max",x);
-     set("y max",0);
-     set("y min",-1500e-9);
-     set("z min",-3300e-9);
-     set("z max",3300e-9);
-     set("alpha", 1);
-     set("override mesh order from material database",1);
-     set("mesh order",1);
+    # FDTD region
+    addfdtd;
     
-   
-      #Defining fdtd            
-      addfdtd;
-      set("dimension","2D");
-      set("x min",-length_WG);
-      set("x max",x);
-      set("y min",-1500e-9);
-      set("y max",3000e-9);
-      set("z",0);   
-      set("simulation time",1500e-15);
-      set("x min bc", "PML");
-      set("x max bc", "PML");
-      set("y min bc", "PML");
-      set("y max bc", "PML"); 
-      set("mesh type","auto non-uniform");
-      set("allow grading in y",1);
-      set("mesh accuracy",8);
-                  
- 
-       
-                   
-                   #Defining the features of the source and the monitors
-               
-                    
-                   lambda=1.55e-6;
-                   wl_span=100e-9;
-                   
-                   setglobalmonitor("use wavelength spacing",1);
-                   setglobalmonitor("frequency points",1); 
+    set("dimension","2D");
+    set("x min", x_min_sim);
+    set("x max", x_max_sim);
+    set("y min",-sub_thickness);
+    set("y max", 3000e-9);
+    set("simulation time", sim_time);
+    set("x min bc","PML");
+    set("x max bc","PML");
+    set("y min bc","PML");
+    set("y max bc","PML");
+    set("mesh type","auto non-uniform");
+    set("allow grading in y",1);
+    set("mesh accuracy",8);
 
-                   setglobalsource("center wavelength",lambda);
-                   setglobalsource("wavelength span",wl_span);
-                   
-                   #Putting the mode source
-                   
-                   addmode;
-                   set("name","WG_source");
-                   set("mode selection","fundamental TM"); 
-                   set("injection axis","x-axis");
-                   set("x",-length_WG+3000e-9);
-                   set("y min",-500e-9);
-                   set("y max", thick_Si+500e-9); 
-                   set("z min",-3300e-9);
-                   set("z max",3300e-9);
-                   set("override global source settings",0);
-                   
-                  #Putting a monitor above the structre 
-                   
-                   addpower;
-                   set("name","power_up");
-                   set("monitor type","Linear X"); 
-                   set("x min",-length_WG);
-                   set("x max",x);
-                   set("y",2800e-9);
+    # Source
+    addmode;
+    set("name","src_wg");
+    set("mode selection","fundamental TM");
+    set("injection axis","x-axis");
+    set("x",-length_WG + 3000e-9);
+    set("y min",-500e-9);
+    set("y max", thick_Si + 500e-9);
+    set("z min",-width_GC/2);
+    set("z max", width_GC/2);
+    set("override global source settings",0);
 
-              #Putting a monitor below the structre to measure downward diffraction
-                   addpower;
-                   set("name","power_down");
-                   set("monitor type","Linear X");
-                   set("x min",-length_WG);
-                   set("x max",x);
-                   set("y",-1500e-9);
+    # Up monitor (for far-field angle extraction)
+    addpower;
+    set("name","mon_up");
+    set("monitor type","Linear X");
+    set("x min", x_min_sim);
+    set("x max", x_max_sim);
+    set("y", 2800e-9);
 
-                  #Putting a monitor in the waveguide to measure the reflection
-                   addpower;
-                   set("name","power_R");
-                   set("monitor type","Linear Y");
-                   set("x",-length_WG);
-                   set("y min",-500e-9);
-                   set("y max", thick_Si + 500e-9);
+    run;
 
+    # Extract diffraction angle (peak of farfield2d)
+    ang = farfieldangle("mon_up");
+    ff  = farfield2d("mon_up");
+    d_angle = ang(find(ff==max(ff)));
 
-                  #Putting a monitor at the end of the grating coupler to see how much light will transmitt without diffraction
-                   addpower;
-                   set("name","power_T");
-                   set("monitor type","Linear Y");
-                   set("x",x);
-                   set("y min",-1500e-9);
-                   set("y max", 2800e-9);
-                   
-              
-                    #End of block 3.7
+    ?"UNIFORM: period = " + num2str(uniform_period_length*1e9) + " nm, DC = " + num2str(uniform_DC)
+      + "  => peak angle (deg) = " + num2str(d_angle);
 
-               #Block 3.8: we run the simulation and extract the parameters
-                   run;
-                   
-                   
-                   UP=transmission("power_up");   
-                   ?"Power_Up ="+num2str(UP);
-  
-                   DOWN=transmission("power_down");
-                   ?"Power_Down="+num2str(DOWN);
+    ###########################################################
+    # 2B) Apodized sweep (DC0, R) using the extracted d_angle
+    ###########################################################
+    sin_theta = sin(d_angle*pi/180);
 
-                   BACK=transmission("power_R");
-                   ?"Power Reflected="+num2str(BACK);
+    for (DC_zero = DC0_start; DC_zero < DC0_stop; DC_zero = DC_zero + DC0_step) {
 
-                   TRANS=transmission("power_T");
-                   ?"Power_Transmitted="+num2str(TRANS);
+        for (R = R_start; R < R_stop; R = R + R_step) {
 
+            #######################################################
+            # Build APODIZED model (fresh) and run
+            #######################################################
+            switchtolayout;
+            selectall;
+            delete;
 
-                   #commands for extracting the diffraction angle
-                   a=farfieldangle("power_up");
-                   b=farfield2d("power_up"); 
-                   diff_angle=a(find(b==max(b)));
-                   ?"Far_field_angle= "+num2str(diff_angle);
+            # Waveguide (a-Si)
+            addrect;
+            set("name","wg_aSi");
+            set("material","<Object defined dielectric>");
+            set("index", n_aSi);
+            set("x min", -length_WG);
+            set("x max", 0);
+            set("y min", 0);
+            set("y max", thick_Si);
+            set("z", 0);
+            set("z span", width_GC);
+            set("alpha", 0.4);
+            set("override mesh order from material database",1);
+            set("mesh order",1);
 
+            # First apodized unit cell 
+            neff_first = (DC_zero*si_index) + ((1-DC_zero)*1);
+            first_periodicity = lambda0/(neff_first - sin_theta);
 
-                   #commands for extracting the mode profile of the upward diffracted light
-                   a=getresult("power_up","E");
-                   field_profile=a.Ez; 
-                   prop_axis=a.x;
-                   
-                   #Saving the results
-                   matlabsave("thesimulationdata"+num2str(qs),UP,DOWN,BACK,TRANS,R,final_period_length,DC_zero,diff_angle,field_profile,prop_axis,first_gap);
-                   switchtolayout;
-                   qs = qs+1;
-                   
-                #Now we will delete the defined objest for so the creation of devices in the next round don't overlap. 
-                   switchtolayout;
-                   select("substrate");
-                   delete;
-                   
-                  
-                   
-                  
-                   select("GC1");
-                   delete;
-                   select("GC2");
-                   delete;
-                   select("GC3");
-                   delete;
-                   select("GC4");
-                  delete;
-                  select("GC5");
-                 delete;
-                  select("GC6");
-                   delete;
-                   select("GC7");
-              
-                  delete;
-                   select("GC8");
-                   delete;
-                   select("GC9");
-                   delete;
-                   select("GC10");
-                   delete;
-                   select("GC11");
-                   delete;
-                   select("GC12");
-                   delete;
-                   select("GC13");
-                  delete;
-                   select("GC14");
-                   delete;
-                   select("GC15");
-                   delete;
-                   select("GC16");
-                   delete;
-                   select("GC17");
-                   delete;
-                   select("GC18");
-                   delete;
-                   select("GC19");
-                   delete;
-                   select("GC20");
-                   delete;
-                   
-                   select("GC21");
-                   delete;
-                   select("GC22");
-                   delete;
-                   select("GC23");
-                   delete;
-                   select("GC24");
-                   delete;
-                   select("GC25");
-                   delete;
-                   select("GC26");
-                   delete;
-                   select("GC27");
-                   delete;
-                   select("GC28");
-                   delete;
-                   select("GC29");
-                   delete;
-                   select("GC30");
-                   delete;
-                   select("GC31");
-                   delete;
-                   select("GC32");
-                   delete;
-                   select("GC33");
-                   delete;
-                   select("GC34");
-                   delete;
-                   select("GC35");
-                   delete;
-                   select("GC36");
-                   delete;
-                   select("GC37");
-                   delete;
-                   select("GC38");
-                   delete;
-                   select("GC39");
-                   delete;
-                   
-                   select("WG_source");
-                   delete;
-                   select("power_up");
-                   delete;
-                   select("power_down");
-                   delete;
-                   select("power_R");
-                   delete;
-                   select("power_T");
-                   delete;
-                  
-                   
-                   select("FDTD");
-                   delete;
-                  
-                 
-         }
-         select("first_grating");
-                   delete;
-         
-}   
-select("Si_waveguide");
-delete;
-                   }
-         
-    
-   
+            first_gap     = (1-DC_zero)*first_periodicity;
+            first_grating = DC_zero*first_periodicity;
+
+            addrect;
+            set("name","g_first");
+            set("material","<Object defined dielectric>");
+            set("index", n_aSi);
+            set("x min", first_gap);
+            set("x max", first_gap + first_grating);
+            set("y min", 0);
+            set("y max", thick_Si);
+            set("z min",-width_GC/2);
+            set("z max", width_GC/2);
+            set("alpha", 1);
+            set("override mesh order from material database",1);
+            set("mesh order",1);
+
+            # Current x position at end of first cell
+            x = first_gap + first_grating;
+
+            # Uniform "final" cell parameters (used when switching)
+            final_period_length = uniform_period_length;
+            final_gap           = (1-uniform_DC)*final_period_length;
+            final_grating       = uniform_DC*final_period_length;
+
+            #  Remaining cells: apodize until criteria fails, then uniform 
+            for (i=0; i<NP-1; i=i+1) {
+
+                DC = DC_zero - (R*(x*x_scale));
+                neff = (DC*si_index) + ((1-DC)*1);
+                periodicity = lambda0/(neff - sin_theta);
+
+                # Continue apodizing only if still above uniform DC and shorter than uniform period
+                if ( (DC > final_DC) & (periodicity < final_period_length) ) {
+
+                    gap = (1-DC)*periodicity;
+
+                    addrect;
+                    set("name","g_"+num2str(i+2));
+                    set("material","<Object defined dielectric>");
+                    set("index", n_aSi);
+                    set("x min", x + gap);
+                    set("x max", x + periodicity);
+                    set("y min", 0);
+                    set("y max", thick_Si);
+                    set("z min",-width_GC/2);
+                    set("z max", width_GC/2);
+                    set("alpha", 1);
+                    set("override mesh order from material database",1);
+                    set("mesh order",1);
+
+                    x = x + periodicity;
+
+                } else {
+
+                    # Switch to uniform cells
+                    addrect;
+                    set("name","g_"+num2str(i+2));
+                    set("material","<Object defined dielectric>");
+                    set("index", n_aSi);
+                    set("x min", x + final_gap);
+                    set("x max", x + final_gap + final_grating);
+                    set("y min", 0);
+                    set("y max", thick_Si);
+                    set("z min",-width_GC/2);
+                    set("z max", width_GC/2);
+                    set("alpha", 1);
+                    set("override mesh order from material database",1);
+                    set("mesh order",1);
+
+                    x = x + final_period_length;
+                }
+            }
+
+            # Substrate spans full device
+            addrect;
+            set("name","substrate");
+            set("material","<Object defined dielectric>");
+            set("index", n_diamond);
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y max", 0);
+            set("y min",-sub_thickness);
+            set("z min",-width_GC/2);
+            set("z max", width_GC/2);
+            set("alpha", 1);
+            set("override mesh order from material database",1);
+            set("mesh order",1);
+
+            # FDTD region
+            addfdtd;
+            
+            set("dimension","2D");
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y min",-sub_thickness);
+            set("y max", 3000e-9);
+            set("simulation time", sim_time);
+            set("x min bc","PML");
+            set("x max bc","PML");
+            set("y min bc","PML");
+            set("y max bc","PML");
+            set("mesh type","auto non-uniform");
+            set("allow grading in y",1);
+            set("mesh accuracy",8);
+
+            # Source
+            addmode;
+            set("name","src_wg");
+            set("mode selection","fundamental TM");
+            set("injection axis","x-axis");
+            set("x",-length_WG + 3000e-9);
+            set("y min",-500e-9);
+            set("y max", thick_Si + 500e-9);
+            set("z min",-width_GC/2);
+            set("z max", width_GC/2);
+            set("override global source settings",0);
+
+            # Monitors
+            addpower;  # Up
+            set("name","mon_up");
+            set("monitor type","Linear X");
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y", 2800e-9);
+
+            addpower;  # Down
+            set("name","mon_down");
+            set("monitor type","Linear X");
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y",-sub_thickness);
+
+            addpower;  # Reflection (left side)
+            set("name","mon_R");
+            set("monitor type","Linear Y");
+            set("x",-length_WG);
+            set("y min",-500e-9);
+            set("y max", thick_Si + 500e-9);
+
+            addpower;  # Transmission (right side)
+            set("name","mon_T");
+            set("monitor type","Linear Y");
+            set("x", x);
+            set("y min",-sub_thickness);
+            set("y max", 2800e-9);
+
+            #######################################################
+            # Run and extract results
+            #######################################################
+            run;
+
+            UP    = transmission("mon_up");
+            DOWN  = transmission("mon_down");
+            BACK  = transmission("mon_R");
+            TRANS = transmission("mon_T");
+
+            # Diffraction angle for apodized design
+            ang2 = farfieldangle("mon_up");
+            ff2  = farfield2d("mon_up");
+            diff_angle = ang2(find(ff2==max(ff2)));
+
+            # Field profile at mon_up (example Ez)
+            resE = getresult("mon_up","E");
+            field_profile = resE.Ez;
+            prop_axis     = resE.x;
+
+            # Save results (keep naming stable for post-processing)
+            matlabsave("sim_" + num2str(qs),
+                       UP, DOWN, BACK, TRANS,
+                       R, final_period_length, DC_zero, diff_angle,
+                       field_profile, prop_axis, first_gap);
+
+            qs = qs + 1;
+
+            ?"APODIZED RUN " + num2str(qs) + ": period=" + num2str(uniform_period_length*1e9) + "nm, DC0=" + num2str(DC_zero)
+              + ", R=" + num2str(R) + " | UP=" + num2str(UP) + " DOWN=" + num2str(DOWN) + " BACK=" + num2str(BACK)
+              + " TRANS=" + num2str(TRANS) + " angle=" + num2str(diff_angle);
+
+        } # R
+    } # DC0
+} # uniform period
+
