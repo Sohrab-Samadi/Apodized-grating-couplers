@@ -1,4 +1,5 @@
-#Block 1: This block is for creating the file and defining its directory.
+#Block 1: This block is for creating the simulation file and defining its directory.
+
 clear;
 #changing directory and saving the .lsf file
 FILE_NAME="Grating_coupler_Si_2D";
@@ -16,6 +17,7 @@ for(0; string_chceck>0; 0) {
 
 cd(substring(path,a-1,length(path)-a+1));
 save(FILE_NAME+".fsp");
+
 #End of block 1.
 
 
@@ -25,12 +27,23 @@ delete;
 
 #Block 2: this block is for defining the constanst such as the refractive index of materials, constant geometrical features, etc.
 
+final_DC=0.6;  #The duty cycle of the uniform section of the apodized grating coupler. 
+thick_Si=220e-9;  #Thisckness of the amorphous silicon layer
+NP=40;  #Total number of unit cells in the grating couplers
+si_index = 3.0468; #The effective refractive index of amorphous silicon on diamond at 1550 nm.
+
+#End of block 2.
+
+#Block 3: This block is for simulation uniform grating couplers. We need to simulate uniform grating couplers in order to extract the 
+#diffraction angle of them. This diffraction angle will be used when we want to apodize the first few unit cells of these uniform grating
+#grating couplers, because they have to diffract light at the same angle.
+
 qs = 0;
 for(final_period_length=420e-9; final_period_length< 472e-9; final_period_length = final_period_length + 10e-9){ 
-final_DC=0.6;
-thick_Si=220e-9;
-NP=40;
-si_index = 3.0468;
+
+
+
+
 
 
 final_gap = (1-final_DC)*(final_period_length);
