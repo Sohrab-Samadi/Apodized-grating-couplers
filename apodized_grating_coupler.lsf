@@ -1,0 +1,407 @@
+#######################################################################
+# Apodized Grating Coupler (a-Si on Diamond) — 2D FDTD (Lumerical)
+#
+# Workflow:
+#   (1) Sweep UNIFORM gratings to extract a reference far-field peak angle
+#   (2) For each uniform design, sweep apodization parameters (DC0, R),
+#       generate apodized + uniform sections, run FDTD, and save results.
+#
+#
+#######################################################################
+
+
+#############################
+#  file name
+#############################
+clear;
+switchtolayout;
+selectall;
+delete;
+
+FILE_NAME = "GratingCoupler_aSiDiamond_2D";
+
+#############################
+# 1) constants and settings
+#############################
+
+# Geometry 
+thick_Si      = 220e-9;         # a-Si thickness (y)
+NP            = 40;             # number of grating periods
+length_WG     = 5000e-9;        # input waveguide length 
+width_GC      = 6600e-9;        # z span (2D, but keep consistent)
+sub_thickness = 1500e-9;        # substrate thickness 
+
+#  Refractive Indices at 1550 nm
+n_aSi     = 3.62;               # a-Si refractive refractive index 
+n_diamond = 2.3878;             # diamond refractive index
+si_index  = 3.0468;             # effective refractive index of a-Si on diamond
+
+# Source and monitor settings 
+lambda0   = 1.55e-6;
+wl_span   = 100e-9;
+sim_time  = 1500e-15;
+
+setglobalmonitor("use wavelength spacing",1);
+setglobalmonitor("frequency points",1);
+setglobalsource("center wavelength", lambda0);
+setglobalsource("wavelength span", wl_span);
+
+#  Uniform grating sweep reference angle extraction
+uniform_DC    = 0.60;
+p_start       = 460e-9;
+p_stop        = 582e-9;         
+p_step        = 10e-9;
+
+#  Apodization parameter sweeps 
+DC0_start     = 0.75;
+DC0_stop      = 0.9251;         
+DC0_step      = 0.025;
+
+R_start       = 0.0025;
+R_stop        = 0.1;            
+R_step        = 0.0025;
+
+#  Apodized-to-uniform switching criteria 
+
+final_DC      = uniform_DC;     
+
+# x_sclae
+x_scale       = 1e6;
+
+# Run index (for saving)
+qs = 0;
+
+#############################
+# 2) Uniform sweep: extract diffraction angle
+#############################
+
+for (uniform_period_length = p_start; uniform_period_length < p_stop; uniform_period_length = uniform_period_length + p_step) {
+
+    # Derived uniform geometry
+    uniform_gap     = (1-uniform_DC) * uniform_period_length;
+    uniform_grating = uniform_DC * uniform_period_length;
+
+    # Simulation span for uniform structure
+    length_BOX = NP*uniform_period_length + length_WG;
+    x_min_sim  = -length_WG;
+    x_max_sim  = -length_WG + length_BOX;
+
+    ###########################################################
+    # 2A) Build UNIFORM model (fresh) and run
+    ###########################################################
+    switchtolayout;
+    selectall;
+    delete;
+
+    # Waveguide (a-Si)
+    addrect;
+    set("name","wg_aSi");
+    set("material","<Object defined dielectric>");
+    set("index", n_aSi);
+    set("x min", -length_WG);
+    set("x max", 0);
+    set("y min", 0);
+    set("y max", thick_Si);
+    set("z", 0);
+    set("z span", width_GC);
+    set("alpha", 0.4);
+    set("override mesh order from material database",1);
+    set("mesh order",1);
+
+    # Substrate (diamond)
+    addrect;
+    set("name","substrate");
+    set("material","<Object defined dielectric>");
+    set("index", n_diamond);
+    set("x min", x_min_sim);
+    set("x max", x_max_sim);
+    set("y max", 0);
+    set("y min",-sub_thickness);
+    set("z min",-width_GC/2);
+    set("z max", width_GC/2);
+    set("alpha", 1);
+    set("override mesh order from material database",1);
+    set("mesh order",1);
+
+    # Uniform grating teeth
+    for (i=0; i<NP; i=i+1) {
+        addrect;
+        set("name","g_uni_"+num2str(i+1));
+        set("material","<Object defined dielectric>");
+        set("index", n_aSi);
+
+        set("x min", i*uniform_period_length + uniform_gap);
+        set("x max",(i+1)*uniform_period_length);
+        set("y min",0);
+        set("y max",thick_Si);
+        set("z min",-width_GC/2);
+        set("z max", width_GC/2);
+        set("alpha", 1);
+        set("override mesh order from material database",1);
+        set("mesh order",1);
+    }
+
+    # FDTD region
+    addfdtd;
+    
+    set("dimension","2D");
+    set("x min", x_min_sim);
+    set("x max", x_max_sim);
+    set("y min",-sub_thickness);
+    set("y max", 3000e-9);
+    set("simulation time", sim_time);
+    set("x min bc","PML");
+    set("x max bc","PML");
+    set("y min bc","PML");
+    set("y max bc","PML");
+    set("mesh type","auto non-uniform");
+    set("allow grading in y",1);
+    set("mesh accuracy",8);
+
+    # Source
+    addmode;
+    set("name","src_wg");
+    set("mode selection","fundamental TM");
+    set("injection axis","x-axis");
+    set("x",-length_WG + 3000e-9);
+    set("y min",-500e-9);
+    set("y max", thick_Si + 500e-9);
+    set("z min",-width_GC/2);
+    set("z max", width_GC/2);
+    set("override global source settings",0);
+
+    # Up monitor (for far-field angle extraction)
+    addpower;
+    set("name","mon_up");
+    set("monitor type","Linear X");
+    set("x min", x_min_sim);
+    set("x max", x_max_sim);
+    set("y", 2800e-9);
+
+    run;
+
+    # Extract diffraction angle (peak of farfield2d)
+    ang = farfieldangle("mon_up");
+    ff  = farfield2d("mon_up");
+    d_angle = ang(find(ff==max(ff)));
+
+    ?"UNIFORM: period = " + num2str(uniform_period_length*1e9) + " nm, DC = " + num2str(uniform_DC)
+      + "  => peak angle (deg) = " + num2str(d_angle);
+
+    ###########################################################
+    # 2B) Apodized sweep (DC0, R) using the extracted d_angle
+    ###########################################################
+    sin_theta = sin(d_angle*pi/180);
+
+    for (DC_zero = DC0_start; DC_zero < DC0_stop; DC_zero = DC_zero + DC0_step) {
+
+        for (R = R_start; R < R_stop; R = R + R_step) {
+
+            #######################################################
+            # Build APODIZED model (fresh) and run
+            #######################################################
+            switchtolayout;
+            selectall;
+            delete;
+
+            # Waveguide (a-Si)
+            addrect;
+            set("name","wg_aSi");
+            set("material","<Object defined dielectric>");
+            set("index", n_aSi);
+            set("x min", -length_WG);
+            set("x max", 0);
+            set("y min", 0);
+            set("y max", thick_Si);
+            set("z", 0);
+            set("z span", width_GC);
+            set("alpha", 0.4);
+            set("override mesh order from material database",1);
+            set("mesh order",1);
+
+            # First apodized unit cell 
+            neff_first = (DC_zero*si_index) + ((1-DC_zero)*1);
+            first_periodicity = lambda0/(neff_first - sin_theta);
+
+            first_gap     = (1-DC_zero)*first_periodicity;
+            first_grating = DC_zero*first_periodicity;
+
+            addrect;
+            set("name","g_first");
+            set("material","<Object defined dielectric>");
+            set("index", n_aSi);
+            set("x min", first_gap);
+            set("x max", first_gap + first_grating);
+            set("y min", 0);
+            set("y max", thick_Si);
+            set("z min",-width_GC/2);
+            set("z max", width_GC/2);
+            set("alpha", 1);
+            set("override mesh order from material database",1);
+            set("mesh order",1);
+
+            # Current x position at end of first cell
+            x = first_gap + first_grating;
+
+            # Uniform "final" cell parameters (used when switching)
+            final_period_length = uniform_period_length;
+            final_gap           = (1-uniform_DC)*final_period_length;
+            final_grating       = uniform_DC*final_period_length;
+
+            #  Remaining cells: apodize until criteria fails, then uniform 
+            for (i=0; i<NP-1; i=i+1) {
+
+                DC = DC_zero - (R*(x*x_scale));
+                neff = (DC*si_index) + ((1-DC)*1);
+                periodicity = lambda0/(neff - sin_theta);
+
+                # Continue apodizing only if still above uniform DC and shorter than uniform period
+                if ( (DC > final_DC) & (periodicity < final_period_length) ) {
+
+                    gap = (1-DC)*periodicity;
+
+                    addrect;
+                    set("name","g_"+num2str(i+2));
+                    set("material","<Object defined dielectric>");
+                    set("index", n_aSi);
+                    set("x min", x + gap);
+                    set("x max", x + periodicity);
+                    set("y min", 0);
+                    set("y max", thick_Si);
+                    set("z min",-width_GC/2);
+                    set("z max", width_GC/2);
+                    set("alpha", 1);
+                    set("override mesh order from material database",1);
+                    set("mesh order",1);
+
+                    x = x + periodicity;
+
+                } else {
+
+                    # Switch to uniform cells
+                    addrect;
+                    set("name","g_"+num2str(i+2));
+                    set("material","<Object defined dielectric>");
+                    set("index", n_aSi);
+                    set("x min", x + final_gap);
+                    set("x max", x + final_gap + final_grating);
+                    set("y min", 0);
+                    set("y max", thick_Si);
+                    set("z min",-width_GC/2);
+                    set("z max", width_GC/2);
+                    set("alpha", 1);
+                    set("override mesh order from material database",1);
+                    set("mesh order",1);
+
+                    x = x + final_period_length;
+                }
+            }
+
+            # Substrate spans full device
+            addrect;
+            set("name","substrate");
+            set("material","<Object defined dielectric>");
+            set("index", n_diamond);
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y max", 0);
+            set("y min",-sub_thickness);
+            set("z min",-width_GC/2);
+            set("z max", width_GC/2);
+            set("alpha", 1);
+            set("override mesh order from material database",1);
+            set("mesh order",1);
+
+            # FDTD region
+            addfdtd;
+            
+            set("dimension","2D");
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y min",-sub_thickness);
+            set("y max", 3000e-9);
+            set("simulation time", sim_time);
+            set("x min bc","PML");
+            set("x max bc","PML");
+            set("y min bc","PML");
+            set("y max bc","PML");
+            set("mesh type","auto non-uniform");
+            set("allow grading in y",1);
+            set("mesh accuracy",8);
+
+            # Source
+            addmode;
+            set("name","src_wg");
+            set("mode selection","fundamental TM");
+            set("injection axis","x-axis");
+            set("x",-length_WG + 3000e-9);
+            set("y min",-500e-9);
+            set("y max", thick_Si + 500e-9);
+            set("z min",-width_GC/2);
+            set("z max", width_GC/2);
+            set("override global source settings",0);
+
+            # Monitors
+            addpower;  # Up
+            set("name","mon_up");
+            set("monitor type","Linear X");
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y", 2800e-9);
+
+            addpower;  # Down
+            set("name","mon_down");
+            set("monitor type","Linear X");
+            set("x min",-length_WG);
+            set("x max", x);
+            set("y",-sub_thickness);
+
+            addpower;  # Reflection (left side)
+            set("name","mon_R");
+            set("monitor type","Linear Y");
+            set("x",-length_WG);
+            set("y min",-500e-9);
+            set("y max", thick_Si + 500e-9);
+
+            addpower;  # Transmission (right side)
+            set("name","mon_T");
+            set("monitor type","Linear Y");
+            set("x", x);
+            set("y min",-sub_thickness);
+            set("y max", 2800e-9);
+
+            #######################################################
+            # Run and extract results
+            #######################################################
+            run;
+
+            UP    = transmission("mon_up");
+            DOWN  = transmission("mon_down");
+            BACK  = transmission("mon_R");
+            TRANS = transmission("mon_T");
+
+            # Diffraction angle for apodized design
+            ang2 = farfieldangle("mon_up");
+            ff2  = farfield2d("mon_up");
+            diff_angle = ang2(find(ff2==max(ff2)));
+
+            # Field profile at mon_up (example Ez)
+            resE = getresult("mon_up","E");
+            field_profile = resE.Ez;
+            prop_axis     = resE.x;
+
+            # Save results (keep naming stable for post-processing)
+            matlabsave("sim_" + num2str(qs),
+                       UP, DOWN, BACK, TRANS,
+                       R, final_period_length, DC_zero, diff_angle,
+                       field_profile, prop_axis, first_gap);
+
+            qs = qs + 1;
+
+            ?"APODIZED RUN " + num2str(qs) + ": period=" + num2str(uniform_period_length*1e9) + "nm, DC0=" + num2str(DC_zero)
+              + ", R=" + num2str(R) + " | UP=" + num2str(UP) + " DOWN=" + num2str(DOWN) + " BACK=" + num2str(BACK)
+              + " TRANS=" + num2str(TRANS) + " angle=" + num2str(diff_angle);
+
+        } # R
+    } # DC0
+} # uniform period
